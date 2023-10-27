@@ -1,7 +1,8 @@
 import gui
 
 def main():
-    gui.constructapp()
+    mainWindow = gui.MainWindow()
+    mainWindow.run()
     print("end")
 
 if __name__ == "__main__":

@@ -1,4 +1,7 @@
+import os
 import cv2
+
+os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH")
 
 class imageLoader():
     pass
@@ -8,9 +11,12 @@ class assign1():
     def __init__(self):
         pass
 
-    def findCorner(self, img):
-        cv2.drawChessboardCorners(img, self.board_corner, None)
-        pass
+    def findCorner(self):
+        image = cv2.imread("../Dataset_CvDl_Hw1/Q1_Image/1.bmp")
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        print("pressed")
+        #cv2.drawChessboardCorners(img, self.board_corner, None)
+        return image
 
     def findIntrinsic(self):
         pass
@@ -29,7 +35,7 @@ class assign2():
     def arBoard():
         pass
 
-    def arVertical();
+    def arVertical():
         pass
 
 class assign3():
@@ -58,4 +64,6 @@ class assign5():
 
     def showAccuracyLoss():
         pass
-
+    
+    def predictLabel():
+        pass
