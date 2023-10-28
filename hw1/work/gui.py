@@ -67,7 +67,8 @@ class MainWindow():
 
         button1 = QtWidgets.QPushButton("1.1 Find corners")
         button1.clicked.connect(
-                lambda :self.imagewindow.show("1.1", self.assign[0].findCorner()))
+                lambda :self.imagewindow.showInterval("1.1", 2, 
+                        lambda :self.assign[0].loopthrough(self.assign[0].findCorner)))
 
         button2 = QtWidgets.QPushButton("1.2 Find intrinsic")
         button2.clicked.connect(
@@ -86,12 +87,13 @@ class MainWindow():
         layout3.addWidget(button3)
 
         button4 = QtWidgets.QPushButton("1.4 Find distortion")
-        button3.clicked.connect(
-                lambda :self.outfile.print(self.assign[0].findDistortion(0)))
+        button4.clicked.connect(
+                lambda :self.outfile.print(self.assign[0].findDistortion()))
     
         button5 = QtWidgets.QPushButton("1.5 Show result")
-        button3.clicked.connect(
-                lambda :self.imagewindow.show("1.5", self.assign[0].showUndistorted(0)))
+        button5.clicked.connect(
+                lambda :self.imagewindow.showInterval("1.5", 2, 
+                        lambda :self.assign[0].loopthrough(self.assign[0].showUndistorted)))
     
         layout.addWidget(button1)
         layout.addWidget(button2)
@@ -172,28 +174,45 @@ class MainWindow():
         chosen = QtWidgets.QFileDialog.getExistingDirectory(self.mainpanel, "choose folder", self.cwd)
         self.imageloader.setpath(chosen)
 
-class ImageWindow():
-    panel = None
+class ImageWindow(QtWidgets.QWidget):
     label = None
+    workthread = None
 
     def __init__(self):
-        self.panel = QtWidgets.QWidget()
-        layout = QtWidgets.QVBoxLayout(self.panel)
+        super().__init__()
+        layout = QtWidgets.QVBoxLayout(self)
 
-        self.label = QtWidgets.QLabel(self.panel)
+        self.label = QtWidgets.QLabel(self)
 
         layout.addWidget(self.label)
 
-    def show(self, title, cvimg):    
-        self.panel.setWindowTitle(title)
+    def closeEvent(self, event):
+        super().closeEvent(event)
+        if self.workthread is not None:
+            self.workthread.cancel()
+            self.workthread = None
 
-        h, w, d = cvimg.shape
+    def postimg(self, imgfunc):
+        img = imgfunc()
+        h, w, d = img.shape
         pixmap = QtGui.QPixmap(QtGui.QImage(
-                cvimg.data, w, h, w * d, QtGui.QImage.Format_RGB888))
-
+                img.data, w, h, w * d, QtGui.QImage.Format_RGB888))
         self.label.setPixmap(pixmap)
-    
-        self.panel.setVisible(True)
+
+    def display(self, title): 
+        super().setWindowTitle(title)
+        super().setVisible(True)
+
+    def showSingle(self, title, imgfunc):
+        self.postimg(imgfunc)
+        self.display(title)
+
+    def showInterval(self, title, interval, imgfunc):
+        if self.workthread is not None:
+            self.workthread.cancel()
+        self.workthread = backend.SetInterval(interval, 
+                lambda :self.postimg(imgfunc))
+        self.display(title)
 
 class OutFile():
     def __init__(self):
