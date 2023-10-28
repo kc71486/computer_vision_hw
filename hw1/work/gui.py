@@ -1,4 +1,5 @@
 import sys
+import os
 from PyQt5 import QtWidgets, QtGui
 
 import matplotlib
@@ -9,55 +10,82 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import backend
 
 class MainWindow():
-    def __init__():
-        pass
-    def run():
-        app = QtWidgets.QApplication(sys.argv)
+    app = None
+    mainpanel = None
+    imagewindow = None
+    outfile = None
+    cwd = None
+    imageloader = None
+    assign = [None] * 5
 
-        mainpanel = QtWidgets.QWidget()
-        mainpanel.setWindowTitle("Main Window")
-    
-        mainlayout = QtWidgets.QGridLayout(mainpanel)
-        mainlayout.addWidget(getGroup0(), 0, 0)
-        mainlayout.addWidget(getGroup1(), 0, 1)
-        mainlayout.addWidget(getGroup2(), 0, 2)
-        mainlayout.addWidget(getGroup3(), 0, 3)
-        mainlayout.addWidget(getGroup4(), 1, 1)
-        mainlayout.addWidget(getGroup5(), 1, 2)
-
-        mainpanel.setVisible(true)
-        sys.exit(app.exec_())
+    def __init__(self):
+        self.app = QtWidgets.QApplication(sys.argv)
         
-    def getGroup0():
+        self.cwd = os.getcwd()
+        self.imageloader = backend.ImageLoader()
+
+        self.mainpanel = QtWidgets.QWidget()
+        self.mainpanel.setWindowTitle("Main Window")
+    
+        mainlayout = QtWidgets.QGridLayout(self.mainpanel)
+        mainlayout.addWidget(self.getGroup0(), 0, 0)
+        mainlayout.addWidget(self.getGroup1(), 0, 1)
+        mainlayout.addWidget(self.getGroup2(), 0, 2)
+        mainlayout.addWidget(self.getGroup3(), 0, 3)
+        mainlayout.addWidget(self.getGroup4(), 1, 1)
+        mainlayout.addWidget(self.getGroup5(), 1, 2)
+
+        self.imagewindow = ImageWindow()
+        self.outfile = OutFile()
+
+    def run(self):
+        self.mainpanel.setVisible(True)
+        sys.exit(self.app.exec_())
+        
+    def getGroup0(self):
         group = QtWidgets.QGroupBox("Load Image")
         layout = QtWidgets.QVBoxLayout(group)
 
+        button1 = QtWidgets.QPushButton("Load Folder")
+        button1.clicked.connect(self.chooseFolder)
+
+        button2 = QtWidgets.QPushButton("Load Image_L")
+
+        button3 = QtWidgets.QPushButton("Load Image_R")
+
+        layout.addWidget(button1)
+        layout.addWidget(button2)
+        layout.addWidget(button3)
+
         return group
 
-    def getGroup1():
-        assign = backend.assign1()
+    def getGroup1(self):
+        self.assign[0] = backend.Assign1(self.imageloader)
 
         group = QtWidgets.QGroupBox("Calibration")
         layout = QtWidgets.QVBoxLayout(group)
 
-        button1 = QtWidgets.QPushButton("1.1 Find corners", group)
-        button1.clicked.connect(lambda: showImageWindow("1.1", assign.findCorner()))
+        button1 = QtWidgets.QPushButton("1.1 Find corners")
+        button1.clicked.connect(
+                lambda :self.imagewindow.show("1.1", self.assign[0].findCorner()))
 
-        button2 = QtWidgets.QPushButton("1.2 Find intrinsic", group)
+        button2 = QtWidgets.QPushButton("1.2 Find intrinsic")
+        button2.clicked.connect(
+                lambda :self.outfile.print(self.assign[0].findIntrinsic()))
     
-        group3 = QtWidgets.QGroupBox("Find extrinsic", group)
+        group3 = QtWidgets.QGroupBox("Find extrinsic")
         layout3 = QtWidgets.QVBoxLayout(group3)
 
-        spinbox3 = QtWidgets.QSpinBox(group3)
+        spinbox3 = QtWidgets.QSpinBox()
     
-        button3 = QtWidgets.QPushButton("1.3 Find extrinsic", group3)
+        button3 = QtWidgets.QPushButton("1.3 Find extrinsic")
     
         layout3.addWidget(spinbox3)
         layout3.addWidget(button3)
 
-        button4 = QtWidgets.QPushButton("1.4 Find distortion", group)
+        button4 = QtWidgets.QPushButton("1.4 Find distortion")
     
-        button5 = QtWidgets.QPushButton("1.5 Show result", group)
+        button5 = QtWidgets.QPushButton("1.5 Show result")
     
         layout.addWidget(button1)
         layout.addWidget(button2)
@@ -67,89 +95,104 @@ class MainWindow():
 
         return group
 
-def getGroup2():
-    group = QtWidgets.QGroupBox("Augmented Reality")
-    layout = QtWidgets.QVBoxLayout(group)
-   
-    input0 = QtWidgets.QLineEdit(group)
+    def getGroup2(self):
+        group = QtWidgets.QGroupBox("Augmented Reality")
+        layout = QtWidgets.QVBoxLayout(group)
+       
+        input0 = QtWidgets.QLineEdit()
 
-    button1 = QtWidgets.QPushButton("2.1 Show words on board", group)
+        button1 = QtWidgets.QPushButton("2.1 Show words on board")
 
-    button2 = QtWidgets.QPushButton("2.2 Show words vertical", group)
-    
-    layout.addWidget(input0)
-    layout.addWidget(button1)
-    layout.addWidget(button2)
+        button2 = QtWidgets.QPushButton("2.2 Show words vertical")
+        
+        layout.addWidget(input0)
+        layout.addWidget(button1)
+        layout.addWidget(button2)
 
-    return group
+        return group
 
-def getGroup3():
-    group = QtWidgets.QGroupBox("Stereo disparity map")
-    layout = QtWidgets.QVBoxLayout(group)
-    
-    button1 = QtWidgets.QPushButton("3.1 Stereo disparity map", group)
+    def getGroup3(self):
+        group = QtWidgets.QGroupBox("Stereo disparity map")
+        layout = QtWidgets.QVBoxLayout(group)
+        
+        button1 = QtWidgets.QPushButton("3.1 Stereo disparity map")
 
-    layout.addWidget(button1)
+        layout.addWidget(button1)
 
-    return group
+        return group
 
-def getGroup4():
-    group = QtWidgets.QGroupBox("SIFT")
-    layout = QtWidgets.QVBoxLayout(group)
-    
-    button1 = QtWidgets.QPushButton("Load Image1", group)
+    def getGroup4(self):
+        group = QtWidgets.QGroupBox("SIFT")
+        layout = QtWidgets.QVBoxLayout(group)
+        
+        button1 = QtWidgets.QPushButton("Load Image1")
 
-    button2 = QtWidgets.QPushButton("Load Image2", group)
+        button2 = QtWidgets.QPushButton("Load Image2")
 
-    button3 = QtWidgets.QPushButton("4.1 Keypoints", group)
-    
-    button4 = QtWidgets.QPushButton("4.2 Matched Keypoints", group)
-    
-    layout.addWidget(button1)
-    layout.addWidget(button2)
-    layout.addWidget(button3)
-    layout.addWidget(button4)
-    
-    return group
+        button3 = QtWidgets.QPushButton("4.1 Keypoints")
+        
+        button4 = QtWidgets.QPushButton("4.2 Matched Keypoints")
+        
+        layout.addWidget(button1)
+        layout.addWidget(button2)
+        layout.addWidget(button3)
+        layout.addWidget(button4)
+        
+        return group
 
-def getGroup5():
-    group = QtWidgets.QGroupBox("VGG19")
-    layout = QtWidgets.QVBoxLayout(group)
-    
-    button1 = QtWidgets.QPushButton("Load Image", group)
+    def getGroup5(self):
+        group = QtWidgets.QGroupBox("VGG19")
+        layout = QtWidgets.QVBoxLayout(group)
+        
+        button1 = QtWidgets.QPushButton("Load Image")
 
-    button2 = QtWidgets.QPushButton("5.1 Show Agumented Images", group)
+        button2 = QtWidgets.QPushButton("5.1 Show Agumented Images")
 
-    button3 = QtWidgets.QPushButton("5.2 Show Model Structure", group)
-    
-    button4 = QtWidgets.QPushButton("5.3 Show Acc and Loss", group)
-    
-    button5 = QtWidgets.QPushButton("5.4 Inference", group)
-    
-    layout.addWidget(button1)
-    layout.addWidget(button2)
-    layout.addWidget(button3)
-    layout.addWidget(button4)
-    layout.addWidget(button5)
-    return group
+        button3 = QtWidgets.QPushButton("5.2 Show Model Structure")
+        
+        button4 = QtWidgets.QPushButton("5.3 Show Acc and Loss")
+        
+        button5 = QtWidgets.QPushButton("5.4 Inference")
+        
+        layout.addWidget(button1)
+        layout.addWidget(button2)
+        layout.addWidget(button3)
+        layout.addWidget(button4)
+        layout.addWidget(button5)
+
+        return group
+
+    def chooseFolder(self):
+        chosen = QtWidgets.QFileDialog.getExistingDirectory(self.mainpanel, "choose folder", self.cwd)
+        self.imageloader.setpath(chosen)
 
 class ImageWindow():
+    panel = None
+    label = None
+
     def __init__(self):
         self.panel = QtWidgets.QWidget()
-        self.panel.setWindowTitle(title)
-        self.layout = QtWidgets.QVBoxLayout(self.panel)
+        layout = QtWidgets.QVBoxLayout(self.panel)
 
         self.label = QtWidgets.QLabel(self.panel)
 
-        self.layout.addWidget(label)
-    def showImage(title, cvimg):
-    
+        layout.addWidget(self.label)
+
+    def show(self, title, cvimg):    
+        self.panel.setWindowTitle(title)
+
         h, w, d = cvimg.shape
-        #pixmap = QtGui.QPixmap(QtGui.QImage(
-        #        cvimg.data, w, h, w * d, QtGui.QImage.Format_RGB888))
-        pixmap = QtGui.QPixmap(QtGui.QImage("../Dataset_CvDl_Hw1/Q1_Image/1.bmp"))
+        pixmap = QtGui.QPixmap(QtGui.QImage(
+                cvimg.data, w, h, w * d, QtGui.QImage.Format_RGB888))
 
         self.label.setPixmap(pixmap)
     
-        self.widget.setVisible(True)
+        self.panel.setVisible(True)
 
+class OutFile():
+    def __init__(self):
+        pass
+
+    def print(self, obj):
+        print(obj)
+        
