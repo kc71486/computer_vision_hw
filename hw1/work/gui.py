@@ -79,13 +79,19 @@ class MainWindow():
         spinbox3 = QtWidgets.QSpinBox()
     
         button3 = QtWidgets.QPushButton("1.3 Find extrinsic")
+        button3.clicked.connect(
+                lambda :self.outfile.print(self.assign[0].findExtrinsic(0)))
     
         layout3.addWidget(spinbox3)
         layout3.addWidget(button3)
 
         button4 = QtWidgets.QPushButton("1.4 Find distortion")
+        button3.clicked.connect(
+                lambda :self.outfile.print(self.assign[0].findDistortion(0)))
     
         button5 = QtWidgets.QPushButton("1.5 Show result")
+        button3.clicked.connect(
+                lambda :self.imagewindow.show("1.5", self.assign[0].showUndistorted(0)))
     
         layout.addWidget(button1)
         layout.addWidget(button2)

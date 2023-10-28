@@ -46,6 +46,7 @@ class ImageLoader():
 class Assign1():
     board_corner = (11, 8)
     imageloader = None
+    
     def __init__(self, imageloader):
         self.imageloader = imageloader
 
@@ -85,9 +86,9 @@ class Assign1():
         ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
                 objpoints, imgpoints, imgshape[0:2], cammatr, None)
 
-        return cammatr
+        return mtx
 
-    def findExtrinsic(self):
+    def findExtrinsic(self, idx):
         imgshape = self.imageloader[0].shape
         cx = self.board_corner[0]
         cy = self.board_corner[1]
@@ -108,17 +109,81 @@ class Assign1():
                 objpoints.append(objpoint)
         
         cammatr = np.identity(3)
+        rvecs = np.zeros(3)
+        tvecs = np.zeros(3)
 
         ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
-                objpoints, imgpoints, imgshape[0:2], cammatr, None)
-
-        return cammatr
+                objpoints, imgpoints, imgshape[0:2], cammatr)
+        
+        rvec = cv2.Rodrigues(rvecs[idx])
+        tvec = tvecs[idx]
+        
+        return np.concatenate((rvec, tvec), axis=1)
 
     def findDistortion(self):
-        pass
+        imgshape = self.imageloader[0].shape
+        cx = self.board_corner[0]
+        cy = self.board_corner[1]
 
-    def showUndistorted(self:):
-        pass
+        # grid, (0,0,0),(0,1,0),(0,2,0)...(1,0,0),(1,1,0)...(m,n,0)
+        objpoint = np.zeros((cx * cy, 3), np.float32)
+        objpoint[:,:2] = np.mgrid[0:cx,0:cy].T.reshape(-1,2)
+        imgpoint = None
+
+        objpoints = []
+        imgpoints = []
+        
+        for img in self.imageloader:
+            findret, corners = cv2.findChessboardCorners(
+                img, self.board_corner, None, None)
+            if findret:
+                imgpoints.append(corners)
+                objpoints.append(objpoint)
+        
+        cammatr = np.identity(3)
+        rvecs = np.zeros(3)
+        tvecs = np.zeros(3)
+
+        ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
+                objpoints, imgpoints, imgshape[0:2], cammatr)
+        
+        rvec = cv2.Rodrigues(rvecs[idx])
+        tvec = tvecs[idx]
+        
+        return dist
+
+    def showUndistorted(self, idx):
+        imgshape = self.imageloader[0].shape
+        cx = self.board_corner[0]
+        cy = self.board_corner[1]
+
+        # grid, (0,0,0),(0,1,0),(0,2,0)...(1,0,0),(1,1,0)...(m,n,0)
+        objpoint = np.zeros((cx * cy, 3), np.float32)
+        objpoint[:,:2] = np.mgrid[0:cx,0:cy].T.reshape(-1,2)
+        imgpoint = None
+
+        objpoints = []
+        imgpoints = []
+        
+        for img in self.imageloader:
+            findret, corners = cv2.findChessboardCorners(
+                img, self.board_corner, None, None)
+            if findret:
+                imgpoints.append(corners)
+                objpoints.append(objpoint)
+        
+        cammatr = np.identity(3)
+        rvecs = np.zeros(3)
+        tvecs = np.zeros(3)
+
+        ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
+                objpoints, imgpoints, imgshape[0:2], cammatr)
+        
+        img = self.imageloader[idx]
+        
+        dst = cv.undistort(img, mtx, dist, None, None)
+        
+        return dst
 
 class Assign2():
 
