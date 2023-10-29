@@ -82,7 +82,8 @@ class MainWindow():
     
         button3 = QtWidgets.QPushButton("1.3 Find extrinsic")
         button3.clicked.connect(
-                lambda :self.outfile.print(self.assign[0].findExtrinsic(0)))
+                lambda :self.outfile.print(self.assign[0].findExtrinsic(
+                        convertIndex(spinbox3.value(),self.imageloader.files, "bmp"))))
     
         layout3.addWidget(spinbox3)
         layout3.addWidget(button3)
@@ -105,12 +106,17 @@ class MainWindow():
         return group
 
     def getGroup2(self):
+        self.assign[1] = backend.Assign2(self.imageloader)
+
         group = QtWidgets.QGroupBox("Augmented Reality")
         layout = QtWidgets.QVBoxLayout(group)
        
         input0 = QtWidgets.QLineEdit()
 
         button1 = QtWidgets.QPushButton("2.1 Show words on board")
+        button1.clicked.connect(
+                lambda :self.imagewindow.showSingle("2.1", 
+                        lambda :self.assign[1].arBoard(2, input0.text()))) 
 
         button2 = QtWidgets.QPushButton("2.2 Show words vertical")
         
@@ -221,4 +227,10 @@ class OutFile():
 
     def print(self, obj):
         print(obj)
-        
+
+def convertIndex(value, filepaths, ext):
+    dirname = os.path.dirname(filepaths[0])
+    file = os.path.join(dirname, str(value) + "." + ext)
+    return filepaths.index(file)
+
+
