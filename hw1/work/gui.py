@@ -8,6 +8,7 @@ matplotlib.use("Qt5Agg")
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 import backend
+import hwutil
 
 class MainWindow():
     app = None
@@ -22,7 +23,7 @@ class MainWindow():
         self.app = QtWidgets.QApplication(sys.argv)
         
         self.cwd = os.getcwd()
-        self.imageloader = backend.ImageLoader()
+        self.imageloader = hwutil.ImageLoader()
 
         self.mainpanel = QtWidgets.QWidget()
         self.mainpanel.setWindowTitle("Main Window")
@@ -210,7 +211,7 @@ class ImageWindow(QtWidgets.QWidget):
     def showInterval(self, title, interval, imgfunc):
         if self.workthread is not None:
             self.workthread.cancel()
-        self.workthread = backend.SetInterval(interval, 
+        self.workthread = hwutil.SetInterval(interval, 
                 lambda :self.postimg(imgfunc))
         self.display(title)
 
