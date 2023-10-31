@@ -2,23 +2,39 @@ import os
 
 import numpy as np
 
+from multimethod import multimethod
+from typing import Any, Union, Callable, Iterable
+
 import cv2
+
+import hwutil
 
 os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH")
 
 class Assign1():
     board_corner = (11, 8)
     imageloader = None
-    __ctr = 0
-    def __init__(self, imageloader):
+    __ctr1 = 0
+    __ctr5 = 0
+
+    @multimethod
+    def __init__(self, imageloader:hwutil.ImageLoader):
         self.imageloader = imageloader
     
-    def loopthrough(self, selffunc):
-        img = selffunc(self.__ctr)
-        self.__ctr = (self.__ctr + 1) % len(self.imageloader)
+    @multimethod
+    def loop1(self) -> np.ndarray:
+        img = self.findCorner(self.__ctr1)
+        self.__ctr1 = (self.__ctr1 + 1) % len(self.imageloader)
+        return img
+    
+    @multimethod
+    def loop5(self) -> np.ndarray:
+        img = self.showUndistorted(self.__ctr5)
+        self.__ctr5 = (self.__ctr5 + 1) % len(self.imageloader)
         return img
 
-    def findCorner(self, idx):
+    @multimethod
+    def findCorner(self, idx:int) -> np.ndarray:
         img = self.imageloader[idx]
         findret, corners = cv2.findChessboardCorners(
                 img, self.board_corner, None, None)
@@ -29,7 +45,8 @@ class Assign1():
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         return img
 
-    def findIntrinsic(self):
+    @multimethod
+    def findIntrinsic(self) -> np.ndarray:
         imgshape = self.imageloader[0].shape
         cx = self.board_corner[0]
         cy = self.board_corner[1]
@@ -56,7 +73,8 @@ class Assign1():
 
         return mtx
 
-    def findExtrinsic(self, idx):
+    @multimethod
+    def findExtrinsic(self, idx:int) -> np.ndarray:
         imgshape = self.imageloader[0].shape
         cx = self.board_corner[0]
         cy = self.board_corner[1]
@@ -88,6 +106,7 @@ class Assign1():
 
         return np.concatenate((rvec[0], tvec), axis=1)
 
+    @multimethod
     def findDistortion(self):
         imgshape = self.imageloader[0].shape
         cx = self.board_corner[0]
@@ -117,7 +136,8 @@ class Assign1():
         
         return dist
 
-    def showUndistorted(self, idx):
+    @multimethod
+    def showUndistorted(self, idx:int):
         imgshape = self.imageloader[0].shape
         cx = self.board_corner[0]
         cy = self.board_corner[1]
@@ -162,9 +182,12 @@ class Assign2():
     tvecs = []
     dist = None
     projection = []
-    def __init__(self, imageloader):
+
+    @multimethod
+    def __init__(self, imageloader:hwutil.ImageLoader):
         self.imageloader = imageloader
     
+    @multimethod
     def calcProjection(self):
         imgshape = self.imageloader[0].shape
         cx = self.board_corner[0]
@@ -195,7 +218,8 @@ class Assign2():
         self.tvecs = tvecs
         self.dist = dist
 
-    def arBoard(self, idx, string):
+    @multimethod
+    def arBoard(self, idx:int, string:str):
         if len(string) > 6:
             raise Exception("string too long")
         if len(string) == 0:
@@ -227,42 +251,90 @@ class Assign2():
         for i in range(len(linestart)):
             start = pointstart[i][0].astype(int)
             end = pointend[i][0].astype(int)
-            cv2.line(img, start, end, (0, 0, 255), 5)
+            cv2.line(img, start, end, (0, 0, 255), 10)
 
         img = cv2.resize(img, (512, 512))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         return img
 
-    def arVertical(self, idx, string):
+    @multimethod
+    def arVertical(self, idx:int, string:str):
         self.calcProjection()
 
 class Assign3():
+    leftwrapper = None
+    rightwrapper = None
 
-    def disparityMap():
-        pass
+    @multimethod
+    def __init__(self, leftwrapper:hwutil.ImageWrapper, rightwrapper:hwutil.ImageWrapper):
+        self.leftwrapper = leftwrapper
+        self.rightwrapper = rightwrapper
 
-    def disparityValue():
-        pass
+    @multimethod
+    def disparityValue(self, coord:tuple[Union[float,int],Union[float,int]]):
+        outleft = self.leftwrapper.read()
+        outright = self.rightwrapper.read()
+        left = cv2.cvtColor(outleft, cv2.COLOR_BGR2GRAY)
+        right = cv2.cvtColor(outright, cv2.COLOR_BGR2GRAY)
+
+        stereo = cv2.StereoBM_create()
+        disp = stereo.compute(left, right)
+        disparity = np.divide(disp.astype(np.float32), 16).astype(int)
+        
+        disval = disparity[coord[1]][coord[0]]
+        if disval >= 0:
+            newcoord = (coord[0] + disval, coord[1])
+
+            cv2.circle(outright, newcoord, radius=5,
+                       color=(0,0,255), thickness=-1)
+        
+        outleft = cv2.resize(outleft, (512, 512))
+        outleft = cv2.cvtColor(outleft, cv2.COLOR_BGR2RGB)
+
+        outright = cv2.resize(outright, (512, 512))
+        outright = cv2.cvtColor(outright, cv2.COLOR_BGR2RGB)
+        
+        disp = np.maximum(disp, 0)
+        disp = cv2.resize(disp, (512, 512))
+        disp = cv2.merge((disp,disp,disp))
+
+        return outleft, outright, disp
 
 class Assign4():
 
-    def siftKeypoint():
+    @multimethod
+    def __init__(self, leftwrapper, rightwrapper):
+        self.leftwrapper = leftwrapper
+        self.rightwrapper = rightwrapper
+
+    @multimethod
+    def siftKeypoint(self):
         pass
     
-    def siftMatch():
+    @multimethod
+    def siftMatch(self):
         pass
 
 class Assign5():
 
-    def showAugment():
+    @multimethod
+    def __init__(self, leftwrapper, rightwrapper):
+        self.leftwrapper = leftwrapper
+        self.rightwrapper = rightwrapper
+
+    @multimethod
+    def showAugment(self):
         pass
 
-    def showModel():
+    @multimethod
+    def showModel(self):
         pass
 
-    def showAccuracyLoss():
+    @multimethod
+    def showAccuracyLoss(self):
         pass
     
-    def predictLabel():
+    @multimethod
+    def predictLabel(self):
         pass

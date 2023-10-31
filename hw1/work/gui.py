@@ -1,11 +1,18 @@
 import sys
 import os
+
+import numpy as np
+
 from PyQt5 import QtWidgets, QtGui
 
 import matplotlib
 import matplotlib.pyplot as plt
 matplotlib.use("Qt5Agg")
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+
+from multimethod import multimethod
+from typing import Any, Union, Callable, Iterable
+
 
 import backend
 import hwutil
@@ -14,9 +21,12 @@ class MainWindow():
     app = None
     mainpanel = None
     imagewindow = None
+
     outfile = None
     cwd = None
     imageloader = None
+    leftwrapper = None
+    rightwrapper = None
     assign = [None] * 5
 
     def __init__(self):
@@ -24,6 +34,8 @@ class MainWindow():
         
         self.cwd = os.getcwd()
         self.imageloader = hwutil.ImageLoader()
+        self.leftwrapper = hwutil.ImageWrapper()
+        self.rightwrapper = hwutil.ImageWrapper()
 
         self.mainpanel = QtWidgets.QWidget()
         self.mainpanel.setWindowTitle("Main Window")
@@ -36,7 +48,7 @@ class MainWindow():
         mainlayout.addWidget(self.getGroup4(), 1, 1)
         mainlayout.addWidget(self.getGroup5(), 1, 2)
 
-        self.imagewindow = ImageWindow()
+        self.imagewindow = ImageWindow((1, 3))
         self.outfile = OutFile()
 
     def run(self):
@@ -51,8 +63,10 @@ class MainWindow():
         button1.clicked.connect(self.chooseFolder)
 
         button2 = QtWidgets.QPushButton("Load Image_L")
+        button2.clicked.connect(self.chooseLeft)
 
         button3 = QtWidgets.QPushButton("Load Image_R")
+        button3.clicked.connect(self.chooseRight)
 
         layout.addWidget(button1)
         layout.addWidget(button2)
@@ -68,8 +82,8 @@ class MainWindow():
 
         button1 = QtWidgets.QPushButton("1.1 Find corners")
         button1.clicked.connect(
-                lambda :self.imagewindow.showInterval("1.1", 2, 
-                        lambda :self.assign[0].loopthrough(self.assign[0].findCorner)))
+                lambda :self.imagewindow.showInterval("1.1",
+                        self.assign[0].loop1, 2))
 
         button2 = QtWidgets.QPushButton("1.2 Find intrinsic")
         button2.clicked.connect(
@@ -94,8 +108,8 @@ class MainWindow():
     
         button5 = QtWidgets.QPushButton("1.5 Show result")
         button5.clicked.connect(
-                lambda :self.imagewindow.showInterval("1.5", 2, 
-                        lambda :self.assign[0].loopthrough(self.assign[0].showUndistorted)))
+                lambda :self.imagewindow.showInterval("1.5", 
+                        lambda :self.assign[0].loop5(), 2))
     
         layout.addWidget(button1)
         layout.addWidget(button2)
@@ -115,8 +129,8 @@ class MainWindow():
 
         button1 = QtWidgets.QPushButton("2.1 Show words on board")
         button1.clicked.connect(
-                lambda :self.imagewindow.showSingle("2.1", 
-                        lambda :self.assign[1].arBoard(2, input0.text()))) 
+                lambda :self.imagewindow.show("2.1",
+                        self.assign[1].arBoard(2, input0.text()))) 
 
         button2 = QtWidgets.QPushButton("2.2 Show words vertical")
         
@@ -126,17 +140,19 @@ class MainWindow():
 
         return group
 
-    def getGroup3(self):
+    def getGroup3(self) -> QtWidgets.QGroupBox:
+        self.assign[2] = backend.Assign3(self.leftwrapper, self.rightwrapper)
         group = QtWidgets.QGroupBox("Stereo disparity map")
         layout = QtWidgets.QVBoxLayout(group)
         
         button1 = QtWidgets.QPushButton("3.1 Stereo disparity map")
+        button1.clicked.connect(self.clickEventQ3)
 
         layout.addWidget(button1)
 
         return group
 
-    def getGroup4(self):
+    def getGroup4(self) -> QtWidgets.QGroupBox:
         group = QtWidgets.QGroupBox("SIFT")
         layout = QtWidgets.QVBoxLayout(group)
         
@@ -155,7 +171,7 @@ class MainWindow():
         
         return group
 
-    def getGroup5(self):
+    def getGroup5(self) -> QtWidgets.QGroupBox:
         group = QtWidgets.QGroupBox("VGG19")
         layout = QtWidgets.QVBoxLayout(group)
         
@@ -177,60 +193,130 @@ class MainWindow():
 
         return group
 
-    def chooseFolder(self):
+    def chooseFolder(self) -> None:
         chosen = QtWidgets.QFileDialog.getExistingDirectory(self.mainpanel, "choose folder", self.cwd)
-        self.imageloader.setpath(chosen)
+        self.imageloader.setPath(chosen)
+
+    def chooseLeft(self) -> None:
+        chosen, _ = QtWidgets.QFileDialog.getOpenFileName(self.mainpanel, "choose file", self.cwd)
+        self.leftwrapper.setPath(chosen)
+
+    def chooseRight(self) -> None:
+        chosen, _ = QtWidgets.QFileDialog.getOpenFileName(self.mainpanel, "choose file", self.cwd)
+        self.rightwrapper.setPath(chosen)
+
+    def clickEventQ3(self) -> None:
+        self.imagewindow.show("3.1", 
+                    lambda :self.assign[2].disparityValue((700, 400)))
 
 class ImageWindow(QtWidgets.QWidget):
-    label = None
-    workthread = None
+    labels = []
+    workthreads = []
 
-    def __init__(self):
+    @multimethod
+    def __init__(self, gridsize:tuple[int,int]):
         super().__init__()
-        layout = QtWidgets.QVBoxLayout(self)
+        layout = QtWidgets.QGridLayout(self)
+        for i in range(gridsize[0]):
+            for j in range(gridsize[1]):
+                label = QtWidgets.QLabel(self)
+                self.labels.append(label)
+                label.mousePressEvent = None
+                layout.addWidget(label, i, j)
+        self.workthreads = []
+    
+    @multimethod
+    def __clearThread(self) -> None:
+        for thread in self.workthreads:
+            thread.cancel()
+        self.workthreads = []
+        for index, label in enumerate(self.labels):
+            if label.mousePressEvent is not None:
+                self.lebel[index].mousePressEvent = None
 
-        self.label = QtWidgets.QLabel(self)
-
-        layout.addWidget(self.label)
-
-    def closeEvent(self, event):
+    @multimethod
+    def closeEvent(self, event:QtGui.QCloseEvent) -> None:
         super().closeEvent(event)
-        if self.workthread is not None:
-            self.workthread.cancel()
-            self.workthread = None
-
-    def postimg(self, imgfunc):
+        self.__clearThread()
+    
+    @multimethod
+    def __postImg(self, index:int, img:np.ndarray) -> None:
+        h, w, d = img.shape
+        pixmap = QtGui.QPixmap(QtGui.QImage(
+                img.data, w, h, w * d, QtGui.QImage.Format_RGB888))
+        self.labels[index].setPixmap(pixmap)
+    
+    @multimethod
+    def __postImgFunc(self, index:int, imgfunc:Callable[[Any],np.ndarray]) -> None:
         img = imgfunc()
         h, w, d = img.shape
         pixmap = QtGui.QPixmap(QtGui.QImage(
                 img.data, w, h, w * d, QtGui.QImage.Format_RGB888))
-        self.label.setPixmap(pixmap)
+        self.labels[index].setPixmap(pixmap)
 
-    def display(self, title): 
+    @multimethod
+    def __postImg(self, imgfunc:Callable) -> None:
+        imgs = imgfunc()
+        for img in imgs:
+            h, w, d = img.shape
+            pixmap = QtGui.QPixmap(QtGui.QImage(
+                    img.data, w, h, w * d, QtGui.QImage.Format_RGB888))
+            self.labels[index].setPixmap(pixmap)
+    
+    @multimethod
+    def __display(self, title:str) -> None: 
         super().setWindowTitle(title)
         super().setVisible(True)
+   
+    @multimethod
+    def show(self, title:str, imgs:Iterable[np.ndarray]) -> None:
+        self.__clearThread()
+        for index, img in enumerate(imgs):
+            self.__postImg(index, img)
+        self.__display(title)
+    
+    @multimethod
+    def show(self, title:str, imgfunc:Callable) -> None:
+        self.__clearThread()
+        imgs = imgfunc()
+        for index, img in enumerate(imgs):
+            self.__postImg(index, img)
+        self.__display(title)
 
-    def showSingle(self, title, imgfunc):
-        self.postimg(imgfunc)
-        self.display(title)
+    @multimethod
+    def show(self, title:str, img:np.ndarray) -> None:
+        self.__clearThread()
+        self.__postImg(0, img)
+        self.__display(title)
 
-    def showInterval(self, title, interval, imgfunc):
-        if self.workthread is not None:
-            self.workthread.cancel()
-        self.workthread = hwutil.SetInterval(interval, 
-                lambda :self.postimg(imgfunc))
-        self.display(title)
+    @multimethod
+    def showInterval(self, title:str, imgfunc:Callable[[Any],np.ndarray], interval:float|int) -> None:
+        self.__clearThread()
+        self.workthreads.append(hwutil.SetInterval(interval, 
+                lambda :self.__postImgFunc(0, imgfunc)))
+        self.__display(title)
+
+    @multimethod
+    def refresh(self, index:int, img:np.ndarray) -> None:
+        self.__removeThread(index)
+        self.__postImg(index, img)
+
+    @multimethod
+    def addClickEvent(self, index:int, func:Callable) -> None:
+        self.label[index].mousePressEvent = func
 
 class OutFile():
-    def __init__(self):
+    @multimethod
+    def __init__(self) -> Any:
         pass
 
-    def print(self, obj):
+    @multimethod
+    def print(self, obj:Any):
         print(obj)
 
-def convertIndex(value, filepaths, ext):
+@multimethod
+def convertIndex(value, filepaths:Iterable[str], ext:str) -> Iterable[str]:
     dirname = os.path.dirname(filepaths[0])
     file = os.path.join(dirname, str(value) + "." + ext)
     return filepaths.index(file)
-
 
