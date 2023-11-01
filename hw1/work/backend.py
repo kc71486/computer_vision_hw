@@ -143,7 +143,7 @@ class Assign2:
     intrinsic: Optional[np.ndarray]
     r_vectors: Sequence[np.ndarray]
     t_vectors: Sequence[np.ndarray]
-    dist: Any
+    distortion: Optional[np.ndarray]
     projection: list
 
     def __init__(self, imageloader: hwutil.ImageLoader):
@@ -154,10 +154,10 @@ class Assign2:
         self.intrinsic = None
         self.r_vectors = []
         self.t_vectors = []
-        self.dist = None
+        self.distortion = None
         self.projection = []
 
-    def calc_projection(self):
+    def __calc_projection(self):
         image_shape = self.imageloader[0].shape
         cx, cy = self.board_corner
 
@@ -182,15 +182,23 @@ class Assign2:
         self.intrinsic = mtx
         self.r_vectors = r_vectors
         self.t_vectors = t_vectors
-        self.dist = dist
+        self.distortion = dist
+        self.last_updated = self.imageloader.last_updated
 
-    def __get_fs_path(self, filename: str) -> str:
-        dir_name = os.path.dirname(self.imageloader.files[0])
-        return os.path.join(dir_name, 'Q2_lib', filename)
+    def __start_calc(self) -> None:
+        if self.calc_thread.is_alive():
+            return
+        if self.last_updated == self.imageloader.last_updated:
+            return
+        self.calc_thread = threading.Thread(target=self.__calc_projection)
+        self.calc_thread.start()
 
     def __get_ar(self, idx: int, input_string: str, filename: str, base_coord: np.ndarray):
-        self.calc_projection()
-        fs = cv2.FileStorage(self.__get_fs_path(filename), cv2.FILE_STORAGE_READ)
+        self.__start_calc()
+
+        dir_name = os.path.dirname(self.imageloader.files[0])
+        fs_filename = os.path.join(dir_name, 'Q2_lib', filename)
+        fs = cv2.FileStorage(fs_filename, cv2.FILE_STORAGE_READ)
 
         line_start = []
         line_end = []
@@ -203,10 +211,13 @@ class Assign2:
         line_start = np.array(line_start, np.float32)
         line_end = np.array(line_end, np.float32)
 
+        while self.last_updated != self.imageloader.last_updated:
+            pass
+
         point_start, _ = cv2.projectPoints(line_start, self.r_vectors[idx],
-                                           self.t_vectors[idx], self.intrinsic, self.dist)
+                                           self.t_vectors[idx], self.intrinsic, self.distortion)
         point_end, _ = cv2.projectPoints(line_end, self.r_vectors[idx],
-                                         self.t_vectors[idx], self.intrinsic, self.dist)
+                                         self.t_vectors[idx], self.intrinsic, self.distortion)
 
         img = self.imageloader[idx]
         for i in range(len(line_start)):
