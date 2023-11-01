@@ -96,7 +96,7 @@ class MainWindow:
 
         button3 = QtWidgets.QPushButton("1.3 Find extrinsic")
         button3.clicked.connect(
-            lambda: self.outfile.print(self.assign[0].findExtrinsic(
+            lambda: self.outfile.print(self.assign[0].find_extrinsic(
                 self.convert_index(spinbox3.value(), self.imageloader.files, "bmp"))))
 
         layout3.addWidget(spinbox3)
@@ -133,6 +133,9 @@ class MainWindow:
                                                  self.assign[1].ar_board(2, input0.text())))
 
         button2 = QtWidgets.QPushButton("2.2 Show words vertical")
+        button2.clicked.connect(
+            lambda: self.image_window.show_image("2.2",
+                                                 self.assign[1].ar_vertical(2, input0.text())))
 
         layout.addWidget(input0)
         layout.addWidget(button1)
