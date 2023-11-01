@@ -108,8 +108,8 @@ class MainWindow:
 
         button5 = QtWidgets.QPushButton("1.5 Show result")
         button5.clicked.connect(
-            lambda: self.image_window.show_interval("1.5",
-                                                    self.assign[0].loop5, 2))
+            lambda: self.image_window.show_interval_multi("1.5",
+                                                          self.assign[0].loop5, 2))
 
         layout.addWidget(button1)
         layout.addWidget(button2)
@@ -263,11 +263,11 @@ class ImageWindow(QtWidgets.QWidget):
 
     def __post_img_func(self, imgfunc: Callable) -> None:
         images = imgfunc()
-        for img in images:
-            h, w, d = img.shape
+        for index, image in enumerate(images):
+            h, w, d = image.shape
             pixmap = QtGui.QPixmap(QtGui.QImage(
-                img.data, w, h, w * d, QtGui.QImage.Format_RGB888))
-            self.labels[0].setPixmap(pixmap)
+                image.data, w, h, w * d, QtGui.QImage.Format_RGB888))
+            self.labels[index].setPixmap(pixmap)
 
     def __display(self, title: str) -> None:
         super().setWindowTitle(title)
@@ -299,6 +299,13 @@ class ImageWindow(QtWidgets.QWidget):
         self.__clear_label()
         self.work_threads.append(hwutil.SetInterval(interval,
                                                     lambda: self.__post_img_func_idx(0, imgfunc)))
+        self.__display(title)
+
+    def show_interval_multi(self, title: str, imgfunc: Callable, interval: float | int) -> None:
+        self.__clear_thread()
+        self.__clear_label()
+        self.work_threads.append(hwutil.SetInterval(interval,
+                                                    lambda: self.__post_img_func(imgfunc)))
         self.__display(title)
 
     def refresh(self, index: int, img: np.ndarray) -> None:

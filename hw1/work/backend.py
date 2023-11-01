@@ -36,14 +36,14 @@ class Assign1:
         self.__ctr5 = 0
 
     def loop1(self) -> np.ndarray:
-        img = self.find_corner(self.__ctr1)
+        image = self.find_corner(self.__ctr1)
         self.__ctr1 = (self.__ctr1 + 1) % len(self.imageloader)
-        return img
+        return image
 
-    def loop5(self) -> np.ndarray:
-        img = self.show_undistorted(self.__ctr5)
+    def loop5(self) -> tuple[np.ndarray, np.ndarray]:
+        images = self.show_undistorted(self.__ctr5)
         self.__ctr5 = (self.__ctr5 + 1) % len(self.imageloader)
-        return img
+        return images
 
     def __calc_camera(self) -> None:
         image_shape = self.imageloader[0].shape
@@ -121,7 +121,7 @@ class Assign1:
 
         return self.distortion
 
-    def show_undistorted(self, idx: int):
+    def show_undistorted(self, idx: int) -> tuple[np.ndarray, np.ndarray]:
         self.__start_calc()
         while self.last_updated != self.imageloader.last_updated:
             pass
@@ -129,10 +129,12 @@ class Assign1:
         img = self.imageloader[idx]
         dst = cv2.undistort(img, self.intrinsic, self.distortion)
 
+        img = cv2.resize(img, (512, 512))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         dst = cv2.resize(dst, (512, 512))
         dst = cv2.cvtColor(dst, cv2.COLOR_BGR2RGB)
 
-        return dst
+        return img, dst
 
 
 class Assign2:
