@@ -1,9 +1,11 @@
 import gui
 
+
 def main():
-    mainWindow = gui.MainWindow()
-    mainWindow.run()
+    main_window = gui.MainWindow()
+    main_window.run()
     print("end")
+
 
 if __name__ == "__main__":
     main()
