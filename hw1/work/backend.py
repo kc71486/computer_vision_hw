@@ -14,7 +14,7 @@ os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH")
 
 
 class Assign1:
-    board_corner: tuple
+    board_corner = (11, 8)
     imageloader: hwutil.ImageLoader
     last_updated: float
     calc_thread: threading.Thread
@@ -138,7 +138,7 @@ class Assign1:
 
 
 class Assign2:
-    board_corner: tuple[int, int]
+    board_corner = (11, 8)
     imageloader: hwutil.ImageLoader
     last_updated: float
     calc_thread: threading.Thread
@@ -147,9 +147,10 @@ class Assign2:
     t_vectors: Sequence[np.ndarray]
     distortion: Optional[np.ndarray]
     projection: list
+    __ctr1: int
+    __ctr2: int
 
     def __init__(self, imageloader: hwutil.ImageLoader):
-        self.board_corner = (11, 8)
         self.imageloader = imageloader
         self.last_updated = -2
         self.calc_thread = threading.Thread(target=None)
@@ -158,8 +159,20 @@ class Assign2:
         self.t_vectors = []
         self.distortion = None
         self.projection = []
+        self.__ctr1 = 0
+        self.__ctr2 = 0
 
-    def __calc_projection(self):
+    def loop1(self, input_string: str) -> np.ndarray:
+        image = self.ar_board(self.__ctr1, input_string)
+        self.__ctr1 = (self.__ctr1 + 1) % len(self.imageloader)
+        return image
+
+    def loop2(self, input_string: str) -> np.ndarray:
+        image = self.ar_vertical(self.__ctr2, input_string)
+        self.__ctr2 = (self.__ctr2 + 1) % len(self.imageloader)
+        return image
+
+    def __calc_projection(self) -> None:
         image_shape = self.imageloader[0].shape
         cx, cy = self.board_corner
 
@@ -195,7 +208,7 @@ class Assign2:
         self.calc_thread = threading.Thread(target=self.__calc_projection)
         self.calc_thread.start()
 
-    def __get_ar(self, idx: int, input_string: str, filename: str, base_coord: np.ndarray):
+    def __get_ar(self, idx: int, input_string: str, filename: str, base_coord: np.ndarray) -> np.ndarray:
         self.__start_calc()
 
         dir_name = os.path.dirname(self.imageloader.files[0])
@@ -232,7 +245,7 @@ class Assign2:
 
         return img
 
-    def ar_board(self, idx: int, input_string: str):
+    def ar_board(self, idx: int, input_string: str) -> np.ndarray:
         if len(input_string) > 6:
             raise Exception("string too long")
         if len(input_string) == 0:
@@ -243,7 +256,7 @@ class Assign2:
 
         return self.__get_ar(idx, input_string, "alphabet_lib_onboard.txt", base_coord)
 
-    def ar_vertical(self, idx: int, input_string: str):
+    def ar_vertical(self, idx: int, input_string: str) -> np.ndarray:
         if len(input_string) > 6:
             raise Exception("string too long")
         if len(input_string) == 0:
@@ -258,13 +271,14 @@ class Assign2:
 class Assign3:
     left_wrapper: hwutil.ImageWrapper
     right_wrapper: hwutil.ImageWrapper
+    disparity: Optional[np.ndarray]
 
     def __init__(self, left_wrapper: hwutil.ImageWrapper, right_wrapper: hwutil.ImageWrapper) -> None:
         self.left_wrapper = left_wrapper
         self.right_wrapper = right_wrapper
+        self.disparity = None
 
-    def disparity_value(self, coord: tuple[int, int]) -> \
-            tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def disparity_image(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         out_left = self.left_wrapper.read()
         out_right = self.right_wrapper.read()
         left = cv2.cvtColor(out_left, cv2.COLOR_BGR2GRAY)
@@ -272,27 +286,37 @@ class Assign3:
 
         stereo = cv2.StereoBM_create()
         disp = stereo.compute(left, right)
-        disparity = np.divide(disp.astype(np.float32), 16).astype(int)
+        self.disparity = np.divide(disp.astype(np.float32), 16).astype(int)
+
+        out_left = cv2.resize(out_left, (640, 480))
+        out_left = cv2.cvtColor(out_left, cv2.COLOR_BGR2RGB)
+
+        out_right = cv2.resize(out_right, (640, 480))
+        out_right = cv2.cvtColor(out_right, cv2.COLOR_BGR2RGB)
+
+        disp = np.maximum(disp, 0)
+        disp = cv2.resize(disp, (640, 480))
+        disp = cv2.merge((disp, disp, disp))
+
+        return out_left, out_right, disp
+
+    def disparity_value(self, coord: tuple[int, int]) -> np.ndarray:
+        out_right = self.right_wrapper.read()
+
+        disparity = self.disparity
 
         disparity_val = disparity[coord[1]][coord[0]]
+        print(disparity_val)
         if disparity_val >= 0:
             new_coord = (coord[0] + disparity_val, coord[1])
 
             cv2.circle(out_right, new_coord, radius=5,
                        color=(0, 0, 255), thickness=-1)
 
-        out_left = cv2.resize(out_left, (512, 512))
-        out_left = cv2.cvtColor(out_left, cv2.COLOR_BGR2RGB)
-
-        out_right = cv2.resize(out_right, (512, 512))
+        out_right = cv2.resize(out_right, (640, 480))
         out_right = cv2.cvtColor(out_right, cv2.COLOR_BGR2RGB)
 
-        disp = np.maximum(disp, 0)
-        disp = cv2.resize(disp, (512, 512))
-        disp = cv2.merge((disp, disp, disp))
-
-        return out_left, out_right, disp
-
+        return out_right
 
 class Assign4:
     left_wrapper: hwutil.ImageWrapper

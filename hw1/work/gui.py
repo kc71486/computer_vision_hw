@@ -3,14 +3,14 @@ import os
 
 import numpy as np
 
-from PyQt5 import QtWidgets, QtGui
+from PyQt5 import QtWidgets, QtGui, QtCore
 
 import matplotlib
 import matplotlib.pyplot as plt
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Optional
 
 import backend
 import hwutil
@@ -40,7 +40,7 @@ class MainWindow:
         self.main_panel = QtWidgets.QWidget()
         self.main_panel.setWindowTitle("Main Window")
 
-        self.image_window = ImageWindow((1, 3))
+        self.image_window = ImageWindow((2, 2))
         self.outfile = OutFile()
 
         main_layout = QtWidgets.QGridLayout(self.main_panel)
@@ -62,10 +62,10 @@ class MainWindow:
         button1 = QtWidgets.QPushButton("Load Folder")
         button1.clicked.connect(self.choose_folder)
 
-        button2 = QtWidgets.QPushButton("Load First/Left Image")
+        button2 = QtWidgets.QPushButton("Load First/Left")
         button2.clicked.connect(self.choose_left)
 
-        button3 = QtWidgets.QPushButton("Load Second/Right Image")
+        button3 = QtWidgets.QPushButton("Load Second/Right")
         button3.clicked.connect(self.choose_right)
 
         layout.addWidget(button1)
@@ -129,13 +129,15 @@ class MainWindow:
 
         button1 = QtWidgets.QPushButton("2.1 Show words on board")
         button1.clicked.connect(
-            lambda: self.image_window.show_image("2.1",
-                                                 self.assign[1].ar_board(2, input0.text())))
+            lambda: self.image_window.show_interval("2.1",
+                                                    lambda: self.assign[1].loop1(input0.text()),
+                                                    2))
 
         button2 = QtWidgets.QPushButton("2.2 Show words vertical")
         button2.clicked.connect(
-            lambda: self.image_window.show_image("2.2",
-                                                 self.assign[1].ar_vertical(2, input0.text())))
+            lambda: self.image_window.show_interval("2.2",
+                                                    lambda: self.assign[1].loop2(input0.text()),
+                                                    2))
 
         layout.addWidget(input0)
         layout.addWidget(button1)
@@ -203,32 +205,65 @@ class MainWindow:
         self.imageloader.set_path(chosen)
 
     def choose_left(self) -> None:
-        chosen, _ = QtWidgets.QFileDialog.getOpenFileName(self.main_panel, "choose file", self.cwd)
+        chosen, _ = QtWidgets.QFileDialog.getOpenFileName(self.main_panel, "choose left", self.cwd)
         self.left_wrapper.set_path(chosen)
 
     def choose_right(self) -> None:
-        chosen, _ = QtWidgets.QFileDialog.getOpenFileName(self.main_panel, "choose file", self.cwd)
+        chosen, _ = QtWidgets.QFileDialog.getOpenFileName(self.main_panel, "choose right", self.cwd)
         self.right_wrapper.set_path(chosen)
 
     def click_event_q3(self) -> None:
         self.image_window.show_images_func("3.1",
-                                           lambda: self.assign[2].disparity_value((700, 400)))
+                                           lambda: self.assign[2].disparity_image())
+        self.image_window.add_label_event(0, self.click_label_q3)
+
+    def click_label_q3(self, event: QtGui.QMouseEvent) -> None:
+        print(event.x())
+        print(event.y())
+        self.image_window.refresh(1, self.assign[2].disparity_value((event.x(), event.y())))
+
+
+class ClickLabel(QtWidgets.QLabel):
+    released = QtCore.pyqtSignal(QtGui.QMouseEvent)
+    event_info: Optional[QtGui.QMouseEvent]
+    connected_func: Optional[Callable]
+
+    def __init__(self, parent: QtWidgets.QWidget) -> None:
+        super().__init__(parent)
+        self.event_info = None
+        self.connected_func = None
+
+    def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:
+        super().mouseReleaseEvent(event)
+        self.event_info = event
+        self.released.emit(event)
+        self.event_info = None
+
+    def connect_event(self, func: Callable) -> None:
+        if self.connected_func is not None:
+            self.released.disconnect()
+        self.released.connect(func)
+        self.connected_func = func
+
+    def remove_event(self) -> None:
+        if self.connected_func is not None:
+            self.released.disconnect()
+            self.connected_func = None
 
 
 class ImageWindow(QtWidgets.QWidget):
-    labels: list[QtWidgets.QLabel]
+    labels: list[ClickLabel]
     work_threads: list
 
-    def __init__(self, grid_size: tuple[int, int]):
+    def __init__(self, grid_size: tuple[int, int]) -> None:
         super().__init__()
         self.labels = []
         self.work_threads = []
         layout = QtWidgets.QGridLayout(self)
         for i in range(grid_size[0]):
             for j in range(grid_size[1]):
-                label = QtWidgets.QLabel(self)
+                label = ClickLabel(self)
                 self.labels.append(label)
-                label.mousePressEvent = None
                 layout.addWidget(label, i, j)
         self.work_threads = []
 
@@ -237,8 +272,7 @@ class ImageWindow(QtWidgets.QWidget):
             thread.cancel()
         self.work_threads = []
         for index, label in enumerate(self.labels):
-            if label.mousePressEvent is not None:
-                self.lebel[index].mousePressEvent = None
+            self.labels[index].remove_event()
 
     def __clear_label(self) -> None:
         for label in self.labels:
@@ -309,11 +343,13 @@ class ImageWindow(QtWidgets.QWidget):
         self.__display(title)
 
     def refresh(self, index: int, img: np.ndarray) -> None:
-        self.__removeThread(index)
         self.__post_img_idx(index, img)
 
-    def add_click_event(self, index: int, func: Callable) -> None:
-        self.label[index].mousePressEvent = func
+    def add_label_event(self, index: int, func: Callable) -> None:
+        self.labels[index].connect_event(func)
+
+    def remove_label_event(self, index: int) -> None:
+        self.labels[index].remove_event()
 
 
 class OutFile:
