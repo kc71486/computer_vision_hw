@@ -15,6 +15,7 @@ os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH")
 
 class Assign1:
     board_corner = (11, 8)
+    resize_ratio = 0.25
     imageloader: hwutil.ImageLoader
     last_updated: float
     calc_thread: threading.Thread
@@ -96,7 +97,8 @@ class Assign1:
         if find:
             cv2.drawChessboardCorners(img, self.board_corner, corners, find)
 
-        img = cv2.resize(img, (512, 512))
+        imgsize = img.shape
+        img = cv2.resize(img, (int(imgsize[1] * Assign1.resize_ratio), int(imgsize[0] * Assign1.resize_ratio)))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         return img
 
@@ -129,9 +131,11 @@ class Assign1:
         img = self.imageloader[idx]
         dst = cv2.undistort(img, self.intrinsic, self.distortion)
 
-        img = cv2.resize(img, (512, 512))
+        imgsize = img.shape
+        img = cv2.resize(img, (int(imgsize[1] * Assign1.resize_ratio), int(imgsize[0] * Assign1.resize_ratio)))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        dst = cv2.resize(dst, (512, 512))
+        dst_size = dst.shape
+        dst = cv2.resize(dst, (int(dst_size[1] * Assign1.resize_ratio), int(dst_size[0] * Assign1.resize_ratio)))
         dst = cv2.cvtColor(dst, cv2.COLOR_BGR2RGB)
 
         return img, dst
@@ -139,6 +143,7 @@ class Assign1:
 
 class Assign2:
     board_corner = (11, 8)
+    resize_ratio = 0.25
     imageloader: hwutil.ImageLoader
     last_updated: float
     calc_thread: threading.Thread
@@ -240,7 +245,8 @@ class Assign2:
             end = point_end[i][0].astype(int)
             cv2.line(img, start, end, (0, 0, 255), 10)
 
-        img = cv2.resize(img, (512, 512))
+        imgsize = img.shape
+        img = cv2.resize(img, (int(imgsize[1] * Assign3.resize_ratio), int(imgsize[0] * Assign3.resize_ratio)))
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         return img
@@ -252,7 +258,7 @@ class Assign2:
             raise Exception("empty string")
 
         base_coord = np.array([[7, 5, 0], [4, 5, 0], [1, 5, 0],
-                              [7, 2, 0], [4, 2, 0], [1, 2, 0]])
+                               [7, 2, 0], [4, 2, 0], [1, 2, 0]])
 
         return self.__get_ar(idx, input_string, "alphabet_lib_onboard.txt", base_coord)
 
@@ -269,6 +275,7 @@ class Assign2:
 
 
 class Assign3:
+    resize_ratio = 0.25
     left_wrapper: hwutil.ImageWrapper
     right_wrapper: hwutil.ImageWrapper
     disparity: Optional[np.ndarray]
@@ -284,20 +291,26 @@ class Assign3:
         left = cv2.cvtColor(out_left, cv2.COLOR_BGR2GRAY)
         right = cv2.cvtColor(out_right, cv2.COLOR_BGR2GRAY)
 
-        stereo = cv2.StereoBM_create()
+        stereo = cv2.StereoBM.create()
         disp = stereo.compute(left, right)
         self.disparity = np.divide(disp.astype(np.float32), 16).astype(int)
 
-        out_left = cv2.resize(out_left, (640, 480))
+        out_left_size = out_left.shape
+        out_left = cv2.resize(out_left, (int(out_left_size[1] * Assign3.resize_ratio),
+                                         int(out_left_size[0] * Assign3.resize_ratio)))
         out_left = cv2.cvtColor(out_left, cv2.COLOR_BGR2RGB)
 
-        out_right = cv2.resize(out_right, (640, 480))
+        out_right_size = out_right.shape
+        out_right = cv2.resize(out_right, (int(out_right_size[1] * Assign3.resize_ratio),
+                                           int(out_right_size[0] * Assign3.resize_ratio)))
         out_right = cv2.cvtColor(out_right, cv2.COLOR_BGR2RGB)
 
         disp = np.maximum(disp, 0)
-        disp = cv2.resize(disp, (640, 480))
-        disp = cv2.merge((disp, disp, disp))
+        np.savetxt('see.txt', disp)
 
+        disp_size = disp.shape
+        disp = cv2.resize(disp, (int(disp_size[1] * Assign3.resize_ratio), int(disp_size[0] * Assign3.resize_ratio)))
+        disp = cv2.merge((disp, disp, disp))
         return out_left, out_right, disp
 
     def disparity_value(self, coord: tuple[int, int]) -> np.ndarray:
@@ -306,19 +319,22 @@ class Assign3:
         disparity = self.disparity
 
         disparity_val = disparity[coord[1]][coord[0]]
-        print(disparity_val)
         if disparity_val >= 0:
             new_coord = (coord[0] + disparity_val, coord[1])
 
             cv2.circle(out_right, new_coord, radius=5,
                        color=(0, 0, 255), thickness=-1)
 
-        out_right = cv2.resize(out_right, (640, 480))
+        out_right_size = out_right.shape
+        out_right = cv2.resize(out_right, (int(out_right_size[1] * Assign3.resize_ratio),
+                                           int(out_right_size[0] * Assign3.resize_ratio)))
         out_right = cv2.cvtColor(out_right, cv2.COLOR_BGR2RGB)
 
         return out_right
 
+
 class Assign4:
+    resize_ratio = 0.25
     left_wrapper: hwutil.ImageWrapper
     right_wrapper: hwutil.ImageWrapper
 
@@ -326,12 +342,45 @@ class Assign4:
         self.left_wrapper = left_wrapper
         self.right_wrapper = right_wrapper
 
-    def sift_keypoint(self):
+    def sift_keypoint(self) -> np.ndarray:
+        img = self.left_wrapper.read()
+
         sift = cv2.SIFT.create()
-        pass
+        keypoint = sift.detect(img, None)
+
+        new_img = cv2.drawKeypoints(img, keypoint, img, color=(0, 255, 0))
+        new_img_size = new_img.shape
+        new_img = cv2.resize(new_img, (int(new_img_size[1] * Assign4.resize_ratio),
+                                       int(new_img_size[0] * Assign4.resize_ratio)))
+        new_img = cv2.cvtColor(new_img, cv2.COLOR_BGR2RGB)
+
+        return new_img
 
     def sift_match(self):
-        pass
+        left = self.left_wrapper.read()
+        right = self.right_wrapper.read()
+
+        sift = cv2.SIFT.create()
+        left_keypoint, left_des = sift.detectAndCompute(left, None)
+        right_keypoint, right_des = sift.detectAndCompute(right, None)
+
+        matches = cv2.BFMatcher().knnMatch(left_des, right_des, k=2)
+
+        good = []
+        for m, n in matches:
+            if m.distance < 0.75 * n.distance:
+                good.append([m])
+
+        # cv.drawMatchesKnn expects list of lists as matches.
+
+        out_img = cv2.drawMatchesKnn(left, left_keypoint, right, right_keypoint, good, None)
+
+        out_img_size = out_img.shape
+        out_img = cv2.resize(out_img, (int(out_img_size[1] * Assign4.resize_ratio),
+                                       int(out_img_size[0] * Assign4.resize_ratio)))
+        out_img = cv2.cvtColor(out_img, cv2.COLOR_BGR2RGB)
+
+        return out_img
 
 
 class Assign5:

@@ -159,14 +159,18 @@ class MainWindow:
         return group
 
     def get_group4(self) -> QtWidgets.QGroupBox:
-        self.assign[3] = None
+        self.assign[3] = backend.Assign4(self.left_wrapper, self.right_wrapper)
 
         group = QtWidgets.QGroupBox("SIFT")
         layout = QtWidgets.QVBoxLayout(group)
 
         button1 = QtWidgets.QPushButton("4.1 Keypoints")
+        button1.clicked.connect(
+            lambda: self.image_window.show_image("4.1", self.assign[3].sift_keypoint()))
 
         button2 = QtWidgets.QPushButton("4.2 Matched Keypoints")
+        button2.clicked.connect(
+            lambda: self.image_window.show_image("4.2", self.assign[3].sift_match()))
 
         layout.addWidget(button1)
         layout.addWidget(button2)
@@ -218,9 +222,9 @@ class MainWindow:
         self.image_window.add_label_event(0, self.click_label_q3)
 
     def click_label_q3(self, event: QtGui.QMouseEvent) -> None:
-        print(event.x())
-        print(event.y())
-        self.image_window.refresh(1, self.assign[2].disparity_value((event.x(), event.y())))
+        x_val = int(event.x() / backend.Assign3.resize_ratio)
+        y_val = int(event.y() / backend.Assign3.resize_ratio)
+        self.image_window.refresh(1, self.assign[2].disparity_value((x_val, y_val)))
 
 
 class ClickLabel(QtWidgets.QLabel):
