@@ -24,7 +24,11 @@ class MainWindow:
     imageloader: Any
     left_wrapper: hwutil.ImageWrapper
     right_wrapper: hwutil.ImageWrapper
-    assign: list[Any]
+    assign1: backend.Assign1
+    assign2: backend.Assign2
+    assign3: backend.Assign3
+    assign4: backend.Assign4
+    assign5: backend.Assign5
     main_panel: QtWidgets.QWidget
     image_window: 'ImageWindow'
     outfile: Any
@@ -35,7 +39,6 @@ class MainWindow:
         self.imageloader = hwutil.ImageLoader()
         self.left_wrapper = hwutil.ImageWrapper()
         self.right_wrapper = hwutil.ImageWrapper()
-        self.assign = [None] * 5
 
         self.main_panel = QtWidgets.QWidget()
         self.main_panel.setWindowTitle("Main Window")
@@ -75,7 +78,7 @@ class MainWindow:
         return group
 
     def get_group1(self) -> QtWidgets.QGroupBox:
-        self.assign[0] = backend.Assign1(self.imageloader)
+        self.assign1 = backend.Assign1(self.imageloader)
 
         group = QtWidgets.QGroupBox("Calibration")
         layout = QtWidgets.QVBoxLayout(group)
@@ -83,11 +86,11 @@ class MainWindow:
         button1 = QtWidgets.QPushButton("1.1 Find corners")
         button1.clicked.connect(
             lambda: self.image_window.show_interval("1.1",
-                                                    self.assign[0].loop1, 2))
+                                                    self.assign1.loop1, 2))
 
         button2 = QtWidgets.QPushButton("1.2 Find intrinsic")
         button2.clicked.connect(
-            lambda: self.outfile.print(self.assign[0].find_intrinsic()))
+            lambda: self.outfile.print(self.assign1.find_intrinsic()))
 
         group3 = QtWidgets.QGroupBox("Find extrinsic")
         layout3 = QtWidgets.QVBoxLayout(group3)
@@ -96,7 +99,7 @@ class MainWindow:
 
         button3 = QtWidgets.QPushButton("1.3 Find extrinsic")
         button3.clicked.connect(
-            lambda: self.outfile.print(self.assign[0].find_extrinsic(
+            lambda: self.outfile.print(self.assign1.find_extrinsic(
                 self.convert_index(spinbox3.value(), self.imageloader.files, "bmp"))))
 
         layout3.addWidget(spinbox3)
@@ -104,12 +107,12 @@ class MainWindow:
 
         button4 = QtWidgets.QPushButton("1.4 Find distortion")
         button4.clicked.connect(
-            lambda: self.outfile.print(self.assign[0].find_distortion()))
+            lambda: self.outfile.print(self.assign1.find_distortion()))
 
         button5 = QtWidgets.QPushButton("1.5 Show result")
         button5.clicked.connect(
             lambda: self.image_window.show_interval_multi("1.5",
-                                                          self.assign[0].loop5, 2))
+                                                          self.assign1.loop5, 2))
 
         layout.addWidget(button1)
         layout.addWidget(button2)
@@ -120,7 +123,7 @@ class MainWindow:
         return group
 
     def get_group2(self) -> QtWidgets.QGroupBox:
-        self.assign[1] = backend.Assign2(self.imageloader)
+        self.assign2 = backend.Assign2(self.imageloader)
 
         group = QtWidgets.QGroupBox("Augmented Reality")
         layout = QtWidgets.QVBoxLayout(group)
@@ -130,13 +133,13 @@ class MainWindow:
         button1 = QtWidgets.QPushButton("2.1 Show words on board")
         button1.clicked.connect(
             lambda: self.image_window.show_interval("2.1",
-                                                    lambda: self.assign[1].loop1(input0.text()),
+                                                    lambda: self.assign2.loop1(input0.text()),
                                                     2))
 
         button2 = QtWidgets.QPushButton("2.2 Show words vertical")
         button2.clicked.connect(
             lambda: self.image_window.show_interval("2.2",
-                                                    lambda: self.assign[1].loop2(input0.text()),
+                                                    lambda: self.assign2.loop2(input0.text()),
                                                     2))
 
         layout.addWidget(input0)
@@ -146,7 +149,7 @@ class MainWindow:
         return group
 
     def get_group3(self) -> QtWidgets.QGroupBox:
-        self.assign[2] = backend.Assign3(self.left_wrapper, self.right_wrapper)
+        self.assign3 = backend.Assign3(self.left_wrapper, self.right_wrapper)
 
         group = QtWidgets.QGroupBox("Stereo disparity map")
         layout = QtWidgets.QVBoxLayout(group)
@@ -159,18 +162,18 @@ class MainWindow:
         return group
 
     def get_group4(self) -> QtWidgets.QGroupBox:
-        self.assign[3] = backend.Assign4(self.left_wrapper, self.right_wrapper)
+        self.assign4 = backend.Assign4(self.left_wrapper, self.right_wrapper)
 
         group = QtWidgets.QGroupBox("SIFT")
         layout = QtWidgets.QVBoxLayout(group)
 
         button1 = QtWidgets.QPushButton("4.1 Keypoints")
         button1.clicked.connect(
-            lambda: self.image_window.show_image("4.1", self.assign[3].sift_keypoint()))
+            lambda: self.image_window.show_image("4.1", self.assign4.sift_keypoint()))
 
         button2 = QtWidgets.QPushButton("4.2 Matched Keypoints")
         button2.clicked.connect(
-            lambda: self.image_window.show_image("4.2", self.assign[3].sift_match()))
+            lambda: self.image_window.show_image("4.2", self.assign4.sift_match()))
 
         layout.addWidget(button1)
         layout.addWidget(button2)
@@ -178,7 +181,7 @@ class MainWindow:
         return group
 
     def get_group5(self) -> QtWidgets.QGroupBox:
-        self.assign[4] = None
+        self.assign5 = backend.Assign5(self.left_wrapper)
 
         group = QtWidgets.QGroupBox("VGG19")
         layout = QtWidgets.QVBoxLayout(group)
@@ -218,13 +221,15 @@ class MainWindow:
 
     def click_event_q3(self) -> None:
         self.image_window.show_images_func("3.1",
-                                           lambda: self.assign[2].disparity_image())
+                                           lambda: self.assign3.disparity_image())
         self.image_window.add_label_event(0, self.click_label_q3)
 
     def click_label_q3(self, event: QtGui.QMouseEvent) -> None:
         x_val = int(event.x() / backend.Assign3.resize_ratio)
         y_val = int(event.y() / backend.Assign3.resize_ratio)
-        self.image_window.refresh(1, self.assign[2].disparity_value((x_val, y_val)))
+        img, msg = self.assign3.disparity_value((x_val, y_val))
+        self.image_window.refresh(1, img)
+        self.outfile.print(msg)
 
 
 class ClickLabel(QtWidgets.QLabel):
@@ -289,14 +294,14 @@ class ImageWindow(QtWidgets.QWidget):
     def __post_img_idx(self, index: int, img: np.ndarray) -> None:
         h, w, d = img.shape
         pixmap = QtGui.QPixmap(QtGui.QImage(
-            img.data, w, h, w * d, QtGui.QImage.Format_RGB888))
+            img.data.tobytes(), w, h, w * d, QtGui.QImage.Format_RGB888))
         self.labels[index].setPixmap(pixmap)
 
     def __post_img_func_idx(self, index: int, imgfunc: Callable) -> None:
         img = imgfunc()
         h, w, d = img.shape
         pixmap = QtGui.QPixmap(QtGui.QImage(
-            img.data, w, h, w * d, QtGui.QImage.Format_RGB888))
+            img.data.tobytes(), w, h, w * d, QtGui.QImage.Format_RGB888))
         self.labels[index].setPixmap(pixmap)
 
     def __post_img_func(self, imgfunc: Callable) -> None:
@@ -304,7 +309,7 @@ class ImageWindow(QtWidgets.QWidget):
         for index, image in enumerate(images):
             h, w, d = image.shape
             pixmap = QtGui.QPixmap(QtGui.QImage(
-                image.data, w, h, w * d, QtGui.QImage.Format_RGB888))
+                image.data.tobytes(), w, h, w * d, QtGui.QImage.Format_RGB888))
             self.labels[index].setPixmap(pixmap)
 
     def __display(self, title: str) -> None:

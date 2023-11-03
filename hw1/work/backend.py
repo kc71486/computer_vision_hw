@@ -4,7 +4,7 @@ import threading
 
 import numpy as np
 
-from typing import Any, Optional, Sequence
+from typing import Optional, Sequence, Final
 
 import cv2
 
@@ -14,7 +14,7 @@ os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH")
 
 
 class Assign1:
-    board_corner = (11, 8)
+    BOARD_CORNER: Final = (11, 8)
     resize_ratio = 0.25
     imageloader: hwutil.ImageLoader
     last_updated: float
@@ -26,7 +26,6 @@ class Assign1:
     __ctr5: int
 
     def __init__(self, imageloader: hwutil.ImageLoader):
-        self.board_corner = (11, 8)
         self.imageloader = imageloader
         self.last_updated = -2
         self.calc_thread = threading.Thread(target=None)
@@ -48,7 +47,7 @@ class Assign1:
 
     def __calc_camera(self) -> None:
         image_shape = self.imageloader[0].shape
-        cx, cy = self.board_corner
+        cx, cy = Assign1.BOARD_CORNER
 
         # grid, (0,0,0),(0,1,0),(0,2,0)...(1,0,0),(1,1,0)...(m,n,0)
         object_point = np.zeros((cx * cy, 3), np.float32)
@@ -59,7 +58,7 @@ class Assign1:
 
         for img in self.imageloader:
             found, corners = cv2.findChessboardCorners(
-                img, self.board_corner, None)
+                img, Assign1.BOARD_CORNER, None)
             if found:
                 image_points.append(corners)
                 object_points.append(object_point)
@@ -93,9 +92,9 @@ class Assign1:
     def find_corner(self, idx: int) -> np.ndarray:
         self.__start_calc()
         img = self.imageloader[idx]
-        find, corners = cv2.findChessboardCorners(img, self.board_corner)
+        find, corners = cv2.findChessboardCorners(img, Assign1.BOARD_CORNER)
         if find:
-            cv2.drawChessboardCorners(img, self.board_corner, corners, find)
+            cv2.drawChessboardCorners(img, Assign1.BOARD_CORNER, corners, find)
 
         imgsize = img.shape
         img = cv2.resize(img, (int(imgsize[1] * Assign1.resize_ratio), int(imgsize[0] * Assign1.resize_ratio)))
@@ -142,7 +141,7 @@ class Assign1:
 
 
 class Assign2:
-    board_corner = (11, 8)
+    BOARD_CORNER: Final = (11, 8)
     resize_ratio = 0.25
     imageloader: hwutil.ImageLoader
     last_updated: float
@@ -179,7 +178,7 @@ class Assign2:
 
     def __calc_projection(self) -> None:
         image_shape = self.imageloader[0].shape
-        cx, cy = self.board_corner
+        cx, cy = Assign2.BOARD_CORNER
 
         # grid, (0,0,0),(0,1,0),(0,2,0)...(1,0,0),(1,1,0)...(m,n,0)
         object_point = np.zeros((cx * cy, 3), np.float32)
@@ -189,7 +188,7 @@ class Assign2:
         image_points = []
 
         for img in self.imageloader:
-            found, corners = cv2.findChessboardCorners(img, self.board_corner, None)
+            found, corners = cv2.findChessboardCorners(img, Assign2.BOARD_CORNER, None)
             if found:
                 image_points.append(corners)
                 object_points.append(object_point)
@@ -291,7 +290,7 @@ class Assign3:
         left = cv2.cvtColor(out_left, cv2.COLOR_BGR2GRAY)
         right = cv2.cvtColor(out_right, cv2.COLOR_BGR2GRAY)
 
-        stereo = cv2.StereoBM.create()
+        stereo = cv2.StereoBM.create(numDisparities=256, blockSize=21)
         disp = stereo.compute(left, right)
         self.disparity = np.divide(disp.astype(np.float32), 16).astype(int)
 
@@ -306,31 +305,32 @@ class Assign3:
         out_right = cv2.cvtColor(out_right, cv2.COLOR_BGR2RGB)
 
         disp = np.maximum(disp, 0)
-        np.savetxt('see.txt', disp)
 
         disp_size = disp.shape
         disp = cv2.resize(disp, (int(disp_size[1] * Assign3.resize_ratio), int(disp_size[0] * Assign3.resize_ratio)))
         disp = cv2.merge((disp, disp, disp))
         return out_left, out_right, disp
 
-    def disparity_value(self, coord: tuple[int, int]) -> np.ndarray:
+    def disparity_value(self, coord: tuple[int, int]) -> tuple[np.ndarray, str]:
         out_right = self.right_wrapper.read()
 
         disparity = self.disparity
 
+        out_str = str(coord) + ":"
         disparity_val = disparity[coord[1]][coord[0]]
         if disparity_val >= 0:
-            new_coord = (coord[0] + disparity_val, coord[1])
+            new_coord = (coord[0] - disparity_val, coord[1])
 
-            cv2.circle(out_right, new_coord, radius=5,
-                       color=(0, 0, 255), thickness=-1)
+            cv2.circle(out_right, new_coord, radius=20,
+                       color=(0, 255, 0), thickness=-1)
+        out_str = out_str + str(disparity_val)
 
         out_right_size = out_right.shape
         out_right = cv2.resize(out_right, (int(out_right_size[1] * Assign3.resize_ratio),
                                            int(out_right_size[0] * Assign3.resize_ratio)))
         out_right = cv2.cvtColor(out_right, cv2.COLOR_BGR2RGB)
 
-        return out_right
+        return out_right, out_str
 
 
 class Assign4:
