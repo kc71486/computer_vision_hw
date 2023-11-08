@@ -4,9 +4,18 @@ import threading
 
 import numpy as np
 
+import pickle
+
 from typing import Optional, Sequence, Final
 
 import cv2
+
+from PIL import Image
+
+import torch
+import torchvision
+from torch import nn
+import torchinfo
 
 import hwutil
 
@@ -150,7 +159,7 @@ class Assign2:
     r_vectors: Sequence[np.ndarray]
     t_vectors: Sequence[np.ndarray]
     distortion: Optional[np.ndarray]
-    projection: list
+    projection: Sequence
     __ctr1: int
     __ctr2: int
 
@@ -162,7 +171,6 @@ class Assign2:
         self.r_vectors = []
         self.t_vectors = []
         self.distortion = None
-        self.projection = []
         self.__ctr1 = 0
         self.__ctr2 = 0
 
@@ -371,8 +379,6 @@ class Assign4:
             if m.distance < 0.75 * n.distance:
                 good.append([m])
 
-        # cv.drawMatchesKnn expects list of lists as matches.
-
         out_img = cv2.drawMatchesKnn(left, left_keypoint, right, right_keypoint, good, None)
 
         out_img_size = out_img.shape
@@ -384,19 +390,186 @@ class Assign4:
 
 
 class Assign5:
+    image_loader: hwutil.ImageLoader
     wrapper: hwutil.ImageWrapper
+    weight_path: Final[str] = "VGG19_Epoch_50.ckpt"
+    transform: torchvision.transforms.transforms
+    model: Optional[nn.Module]
+    weight_loaded: bool
+    batches: Final[int]
+    train_loss: Sequence
+    train_accuracy: Sequence
+    test_loss: Sequence
+    test_accuracy: Sequence
+    labels: Final[Sequence[str]] = ["airplane", "automobile", "bird", "cat", "deer",
+                                    "dog", "frog", "horse", "ship", "truck"]
 
-    def __init__(self, wrapper):
-        self.left_wrapper = wrapper
+    def __init__(self, loader, wrapper: hwutil.ImageWrapper) -> None:
+        self.image_loader = loader
+        self.wrapper = wrapper
+        self.transform = torchvision.transforms.Compose([
+            torchvision.transforms.RandomHorizontalFlip(p=0.5),
+            torchvision.transforms.RandomCrop(size=32, padding=2, pad_if_needed=True),
+            torchvision.transforms.RandomRotation(degrees=30)
+        ])
+        self.model = None
+        self.weight_loaded = False
+        self.batches = 32
+        self.train_loss = []
+        self.train_accuracy = []
+        self.test_loss = []
+        self.test_accuracy = []
 
-    def show_augment(self):
-        pass
+    def __yield_model(self) -> None:
+        if self.model is None:
+            self.model = VGG19()
 
-    def show_model(self):
-        pass
+    def __yield_stats(self) -> None:
+        if len(self.test_accuracy) > 0:
+            return
+        with open("train_loss.p", "rb") as f:
+            self.train_loss = pickle.load(f)
+        with open("train_accuracy.p", "rb") as f:
+            self.train_accuracy = pickle.load(f)
+        with open("test_loss.p", "rb") as f:
+            self.test_loss = pickle.load(f)
+        with open("test_accuracy.p", "rb") as f:
+            self.test_accuracy = pickle.load(f)
 
-    def show_accuracy_loss(self):
-        pass
+    def __yield_weight(self) -> None:
+        if not self.weight_loaded:
+            self.model.load_state_dict(torch.load(Assign5.weight_path, map_location=torch.device('cpu')))
+            self.weight_loaded = True
 
-    def predict_label(self):
-        pass
+    def show_augment(self) -> Sequence[Image.Image]:
+        self.__yield_model()
+        images = []
+        for cv_img in self.image_loader:
+            img = Image.fromarray(cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB))
+            images.append(self.transform(img))
+        return images
+
+    def show_model(self) -> torchinfo.ModelStatistics:
+        self.__yield_model()
+        return torchinfo.summary(self.model, input_size=(self.batches, 3, 32, 32), mode="eval", verbose=0)
+
+    def show_accuracy_loss(self) -> tuple[Sequence, Sequence, Sequence, Sequence]:
+        self.__yield_model()
+        self.__yield_stats()
+
+        return self.train_loss, self.train_accuracy, self.test_loss, self.test_accuracy
+
+    def predict_label(self) -> tuple[Sequence, Sequence, str]:
+        self.__yield_model()
+        self.__yield_weight()
+
+        cv_img = self.wrapper.read()
+        image = Image.fromarray(cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB))
+        transform = torchvision.transforms.ToTensor()
+        tensor = transform(image)
+        tensor = torch.unsqueeze(tensor, dim=0)
+
+        self.model.eval()
+        with torch.no_grad():
+            predicted = self.model(tensor)
+        predicted = torch.squeeze(predicted)
+        predicted = torch.nn.functional.softmax(predicted, dim=0)
+        predicted_class = self.labels[torch.argmax(predicted).item()]
+
+        return self.labels, predicted, predicted_class
+
+
+class VGG19(torch.nn.Module):
+    features: torch.nn.Module
+    avg_pool: torch.nn.Module
+    classifier: torch.nn.Module
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.features = torch.nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            nn.Conv2d(256, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))  # set pool = (1, 1)
+        self.classifier = nn.Sequential(
+            nn.Linear(512, 4096),  # set in_features = 512
+            nn.ReLU(True),
+            nn.Dropout(p=0.5, inplace=False),
+            nn.Linear(4096, 4096),
+            nn.ReLU(True),
+            nn.Dropout(p=0.5, inplace=False),
+            nn.Linear(4096, 10),  # set out = 10
+        )
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.features(x)
+        x = self.avg_pool(x)
+        x = torch.flatten(x, 1)
+        x = self.classifier(x)
+        return x

@@ -3,11 +3,12 @@ import os
 
 import numpy as np
 
+import cv2
+
 from PyQt5 import QtWidgets, QtGui, QtCore
 
 import matplotlib
-import matplotlib.pyplot as plt
-
+from matplotlib import pyplot
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 from typing import Any, Callable, Iterable, Optional
@@ -29,8 +30,11 @@ class MainWindow:
     assign3: backend.Assign3
     assign4: backend.Assign4
     assign5: backend.Assign5
+    previewLabel: Optional[QtWidgets.QLabel]
+    predictLabel: Optional[QtWidgets.QLabel]
     main_panel: QtWidgets.QWidget
     image_window: 'ImageWindow'
+    plot_window: 'CanvasWindow'
     outfile: Any
 
     def __init__(self):
@@ -42,8 +46,11 @@ class MainWindow:
 
         self.main_panel = QtWidgets.QWidget()
         self.main_panel.setWindowTitle("Main Window")
+        self.previewLabel = None
+        self.predictLabel = None
 
         self.image_window = ImageWindow((2, 2))
+        self.plot_window = CanvasWindow()
         self.outfile = OutFile()
 
         main_layout = QtWidgets.QGridLayout(self.main_panel)
@@ -53,6 +60,7 @@ class MainWindow:
         main_layout.addWidget(self.get_group3(), 0, 3)
         main_layout.addWidget(self.get_group4(), 1, 1)
         main_layout.addWidget(self.get_group5(), 1, 2)
+        main_layout.addWidget(self.get_group6(), 1, 3)
 
     def run(self) -> None:
         self.main_panel.setVisible(True)
@@ -181,23 +189,49 @@ class MainWindow:
         return group
 
     def get_group5(self) -> QtWidgets.QGroupBox:
-        self.assign5 = backend.Assign5(self.left_wrapper)
+        self.assign5 = backend.Assign5(self.imageloader, self.left_wrapper)
 
         group = QtWidgets.QGroupBox("VGG19")
         layout = QtWidgets.QVBoxLayout(group)
 
         button1 = QtWidgets.QPushButton("5.1 Show Augmented Images")
+        button1.clicked.connect(self.show_augmented_gui)
 
         button2 = QtWidgets.QPushButton("5.2 Show Model Structure")
+        button2.clicked.connect(
+            lambda: self.outfile.print(self.assign5.show_model()))
 
         button3 = QtWidgets.QPushButton("5.3 Show Acc and Loss")
+        button3.clicked.connect(self.show_accuracy_plot)
 
         button4 = QtWidgets.QPushButton("5.4 Inference")
+        button4.clicked.connect(self.show_predict_q5)
 
         layout.addWidget(button1)
         layout.addWidget(button2)
         layout.addWidget(button3)
         layout.addWidget(button4)
+
+        return group
+
+    def get_group6(self) -> QtWidgets.QGroupBox:
+        group = QtWidgets.QGroupBox("Q5 extra")
+        layout = QtWidgets.QVBoxLayout(group)
+
+        button1 = QtWidgets.QPushButton("Load and Show Image")
+        button1.clicked.connect(self.choose_and_show_left)
+
+        label1 = QtWidgets.QLabel()
+        label1.setFixedSize(128, 128)
+        self.previewLabel = label1
+
+        label2 = QtWidgets.QLabel()
+        label2.setText("Predicted=")
+        self.predictLabel = label2
+
+        layout.addWidget(button1)
+        layout.addWidget(label1)
+        layout.addWidget(label2)
 
         return group
 
@@ -231,6 +265,59 @@ class MainWindow:
         self.image_window.refresh(1, img)
         self.outfile.print(msg)
 
+    def choose_and_show_left(self) -> None:
+        self.choose_left()
+        preview = self.left_wrapper.read()
+
+        preview = cv2.resize(preview, (128, 128))
+        preview = cv2.cvtColor(preview, cv2.COLOR_BGR2RGB)
+
+        h, w, d = preview.shape
+        pixmap = QtGui.QPixmap(QtGui.QImage(
+            preview.data.tobytes(), w, h, w * d, QtGui.QImage.Format_RGB888))
+        self.previewLabel.setPixmap(pixmap)
+
+    def show_accuracy_plot(self) -> None:
+        train_loss, train_accuracy, valid_loss, valid_accuracy = self.assign5.show_accuracy_loss()
+        epochs = len(train_loss)
+
+        fig = pyplot.figure()
+        pyplot.subplot(2, 1, 1)
+        pyplot.ylabel("train / validation loss")
+        pyplot.xlabel("epochs")
+        pyplot.plot([*range(1, epochs + 1)], train_loss, "r",
+                    [*range(1, epochs + 1)], valid_loss, "b")
+
+        pyplot.subplot(2, 1, 2)
+        pyplot.ylabel("train / validation accuracy")
+        pyplot.xlabel("epochs")
+        pyplot.plot([*range(1, epochs + 1)], train_accuracy, 'r',
+                    [*range(1, epochs + 1)], valid_accuracy, 'b')
+
+        pyplot.tight_layout()
+
+        self.plot_window.show_plot("5.3", fig)
+
+    def show_augmented_gui(self) -> None:
+        images = self.assign5.show_augment()
+
+        fig = pyplot.figure()
+        for idx, img in enumerate(images):
+            fig.add_subplot(3, 3, idx + 1)
+            pyplot.imshow(img)
+            pyplot.axis('off')
+
+        self.plot_window.show_plot("5.1", fig)
+
+    def show_predict_q5(self) -> None:
+        labels, predicted, predicted_class = self.assign5.predict_label()
+
+        fig = pyplot.figure()
+        pyplot.bar(labels, predicted)
+
+        self.plot_window.show_plot("5.4", fig)
+        self.predictLabel.setText(f"Predicted={predicted_class}")
+
 
 class ClickLabel(QtWidgets.QLabel):
     released = QtCore.pyqtSignal(QtGui.QMouseEvent)
@@ -258,6 +345,36 @@ class ClickLabel(QtWidgets.QLabel):
         if self.connected_func is not None:
             self.released.disconnect()
             self.connected_func = None
+
+
+class CanvasWindow(QtWidgets.QWidget):
+    canvas: Optional[FigureCanvas]
+    layout: QtWidgets.QLayout
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.layout = QtWidgets.QVBoxLayout(self)
+        self.canvas = None
+
+    def __set_canvas(self, fig: matplotlib.pyplot.Figure):
+        old_canvas = self.canvas
+        if old_canvas is not None:
+            new_canvas = FigureCanvas(fig)
+            self.layout.replaceWidget(old_canvas, new_canvas)
+            old_canvas.setParent(None)
+            self.canvas = new_canvas
+        else:
+            new_canvas = FigureCanvas(fig)
+            self.layout.addWidget(new_canvas)
+            self.canvas = new_canvas
+
+    def __display(self, title: str) -> None:
+        super().setWindowTitle(title)
+        super().setVisible(True)
+
+    def show_plot(self, title: str, fig: matplotlib.pyplot.Figure) -> None:
+        self.__set_canvas(fig)
+        self.__display(title)
 
 
 class ImageWindow(QtWidgets.QWidget):
@@ -297,15 +414,15 @@ class ImageWindow(QtWidgets.QWidget):
             img.data.tobytes(), w, h, w * d, QtGui.QImage.Format_RGB888))
         self.labels[index].setPixmap(pixmap)
 
-    def __post_img_func_idx(self, index: int, imgfunc: Callable) -> None:
-        img = imgfunc()
+    def __post_img_func_idx(self, index: int, img_func: Callable) -> None:
+        img = img_func()
         h, w, d = img.shape
         pixmap = QtGui.QPixmap(QtGui.QImage(
             img.data.tobytes(), w, h, w * d, QtGui.QImage.Format_RGB888))
         self.labels[index].setPixmap(pixmap)
 
-    def __post_img_func(self, imgfunc: Callable) -> None:
-        images = imgfunc()
+    def __post_img_func(self, img_func: Callable) -> None:
+        images = img_func()
         for index, image in enumerate(images):
             h, w, d = image.shape
             pixmap = QtGui.QPixmap(QtGui.QImage(
@@ -323,11 +440,11 @@ class ImageWindow(QtWidgets.QWidget):
             self.__post_img_idx(index, img)
         self.__display(title)
 
-    def show_images_func(self, title: str, imgfunc: Callable) -> None:
+    def show_images_func(self, title: str, img_func: Callable[[], Iterable[np.ndarray]]) -> None:
         self.__clear_thread()
         self.__clear_label()
-        imgs = imgfunc()
-        for index, img in enumerate(imgs):
+        images = img_func()
+        for index, img in enumerate(images):
             self.__post_img_idx(index, img)
         self.__display(title)
 
@@ -337,18 +454,18 @@ class ImageWindow(QtWidgets.QWidget):
         self.__post_img_idx(0, img)
         self.__display(title)
 
-    def show_interval(self, title: str, imgfunc: Callable, interval: float | int) -> None:
+    def show_interval(self, title: str, img_func: Callable[[], np.ndarray], interval: float | int) -> None:
         self.__clear_thread()
         self.__clear_label()
         self.work_threads.append(hwutil.SetInterval(interval,
-                                                    lambda: self.__post_img_func_idx(0, imgfunc)))
+                                                    lambda: self.__post_img_func_idx(0, img_func)))
         self.__display(title)
 
-    def show_interval_multi(self, title: str, imgfunc: Callable, interval: float | int) -> None:
+    def show_interval_multi(self, title: str, img_func: Callable, interval: float | int) -> None:
         self.__clear_thread()
         self.__clear_label()
         self.work_threads.append(hwutil.SetInterval(interval,
-                                                    lambda: self.__post_img_func(imgfunc)))
+                                                    lambda: self.__post_img_func(img_func)))
         self.__display(title)
 
     def refresh(self, index: int, img: np.ndarray) -> None:
