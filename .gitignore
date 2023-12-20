@@ -1,3 +1,5 @@
 .idea
 hw1/hw1_env
 hw2/hw2_env
+hw1/work/*.pth
+hw2/work/*.pth

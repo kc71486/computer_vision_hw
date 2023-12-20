@@ -392,7 +392,7 @@ class Assign4:
 class Assign5:
     image_loader: hwutil.ImageLoader
     wrapper: hwutil.ImageWrapper
-    weight_path: Final[str] = "VGG19_Epoch_50.ckpt"
+    weight_path: Final[str] = "VGG19_Epoch_50.pth"
     transform: torchvision.transforms.transforms
     model: Optional[nn.Module]
     weight_loaded: bool
